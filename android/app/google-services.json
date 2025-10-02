@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "213476817441",
+    "project_id": "cedar-setup-470114-r7",
+    "storage_bucket": "cedar-setup-470114-r7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:213476817441:android:d4f231823d85d255958160",
+        "android_client_info": {
+          "package_name": "com.kktc.ilankktc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1hYHm6JE4r_g3yDnb2IQmRd0t82qa7EU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

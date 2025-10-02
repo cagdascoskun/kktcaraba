@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function nonEmptyString(field) {
+      return field is string && field.size() > 0;
+    }
+
+    function optionalString(field) {
+      return field == null || field is string;
+    }
+
+    function optionalNumber(field) {
+      return field == null || field is number;
+    }
+
+    function optionalBool(field) {
+      return field == null || field is bool;
+    }
+
+    function optionalList(field) {
+      return field == null || field is list;
+    }
+
+    function validVehicleListing(data) {
+      return nonEmptyString(data.vehicleSubcategory)
+          && nonEmptyString(data.brand)
+          && nonEmptyString(data.model)
+          && (data.engineType == null || nonEmptyString(data.engineType))
+          && (data.fuelType == null || nonEmptyString(data.fuelType))
+          && (data.transmission == null || nonEmptyString(data.transmission))
+          && (data.condition == null || nonEmptyString(data.condition));
+    }
+
+    function validListing(data) {
+      return nonEmptyString(data.title)
+          && data.price is number && data.price >= 0
+          && nonEmptyString(data.currency)
+          && data.images is list && data.images.size() > 0 && data.images.size() <= 20
+          && nonEmptyString(data.category)
+          && nonEmptyString(data.type)
+          && nonEmptyString(data.location)
+          && optionalString(data.description)
+          && optionalString(data.publisher)
+          && nonEmptyString(data.publisherId)
+          && optionalString(data.publisherAvatar)
+          && data.isPremium is bool
+          && data.publishedAt is timestamp
+          && optionalString(data.vehicleSubcategory)
+          && optionalString(data.brand)
+          && optionalString(data.model)
+          && optionalString(data.engineType)
+          && optionalString(data.fuelType)
+          && optionalString(data.transmission)
+          && optionalString(data.condition)
+          && optionalString(data.drivetrain)
+          && optionalString(data.bodyType)
+          && optionalNumber(data.power)
+          && optionalNumber(data.rooms)
+          && optionalNumber(data.year)
+          && optionalNumber(data.mileage)
+          && optionalNumber(data.size)
+          && optionalList(data.tags)
+          && optionalBool(data.isFeatured)
+          && optionalBool(data.isHighlighted)
+          && (data.category != 'arac' || validVehicleListing(data));
+    }
+
+    function validGuestListing(data) {
+      return request.auth == null
+          && data.publisherId == 'guest'
+          && data.isPremium == false
+          && validListing(data);
+    }
+
+    match /users/{userId} {
+      allow read, update, delete: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create: if (isSignedIn() && request.auth.uid == request.resource.data.publisherId && validListing(request.resource.data))
+          || validGuestListing(request.resource.data);
+      allow update, delete: if isSignedIn()
+          && request.auth.uid == resource.data.publisherId
+          && validListing(request.resource.data);
+    }
+  }
+}
