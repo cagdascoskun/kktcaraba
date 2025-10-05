@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../data/car_brands.dart';
 import '../data/car_models.dart';
+import '../data/category_tree.dart';
 import '../data/cities.dart';
 import '../data/models.dart';
 import '../data/vehicle_categories.dart';
@@ -45,6 +46,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   TransmissionType? _selectedTransmission;
   VehicleCondition? _selectedVehicleCondition;
   Drivetrain? _selectedDrivetrain;
+  String? _selectedGeneralSubcategoryId;
+  String? _selectedGeneralDetailId;
 
   @override
   void dispose() {
@@ -62,6 +65,10 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentCategory = _category ?? ListingCategory.konut;
+    final generalNodes = listingCategoryTree[currentCategory] ?? const <CategoryNode>[];
+    final primaryNode = findChildById(generalNodes, _selectedGeneralSubcategoryId);
+    final detailNodes = primaryNode?.children ?? const <CategoryNode>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Yeni İlan Oluştur')),
@@ -75,8 +82,16 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
             TextFormField(
               controller: _titleController,
               decoration: const InputDecoration(labelText: 'İlan Başlığı'),
-              validator: (value) =>
-                  value == null || value.isEmpty ? 'Başlık giriniz' : null,
+              maxLength: 200,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Başlık giriniz';
+                }
+                if (value.trim().length > 200) {
+                  return 'Başlık 200 karakterden uzun olamaz';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -89,6 +104,10 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 if (value == null || value.isEmpty) return 'Fiyat giriniz';
                 final numeric = double.tryParse(value.replaceAll(',', '.'));
                 if (numeric == null) return 'Geçerli bir sayı giriniz';
+                if (numeric < 0) return 'Fiyat 0\'dan küçük olamaz';
+                if (numeric > 100000000) {
+                  return 'Fiyat 100.000.000 değerini aşamaz';
+                }
                 return null;
               },
             ),
@@ -121,6 +140,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                     _powerController.clear();
                     _bodyTypeController.clear();
                   }
+                  _selectedGeneralSubcategoryId = null;
+                  _selectedGeneralDetailId = null;
                 });
               },
             ),
@@ -167,6 +188,63 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            if (currentCategory != ListingCategory.arac && generalNodes.isNotEmpty) ...[
+              DropdownButtonFormField<String?>(
+                key: ValueKey('general-${_selectedGeneralSubcategoryId ?? 'none'}'),
+                initialValue: _selectedGeneralSubcategoryId,
+                decoration: const InputDecoration(labelText: 'Alt Kategori'),
+                items: generalNodes
+                    .map(
+                      (node) => DropdownMenuItem<String?>(
+                        value: node.id,
+                        child: Text(node.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedGeneralSubcategoryId = value;
+                    _selectedGeneralDetailId = null;
+                  });
+                },
+                validator: (value) {
+                  if (generalNodes.isEmpty) {
+                    return null;
+                  }
+                  if (value == null || value.isEmpty) {
+                    return '${categoryLabel(currentCategory)} için alt kategori seçin';
+                  }
+                  return null;
+                },
+              ),
+              if (detailNodes.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  key: ValueKey('general-detail-${_selectedGeneralDetailId ?? 'none'}'),
+                  initialValue: _selectedGeneralDetailId,
+                  decoration: const InputDecoration(labelText: 'Alt Detay'),
+                  items: detailNodes
+                      .map(
+                        (node) => DropdownMenuItem<String?>(
+                          value: node.id,
+                          child: Text(node.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => _selectedGeneralDetailId = value),
+                  validator: (value) {
+                    if (detailNodes.isEmpty) {
+                      return null;
+                    }
+                    if (value == null || value.isEmpty) {
+                      return 'Alt seçenek seçiniz';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
             if (_category == ListingCategory.arac) ...[
               DropdownButtonFormField<VehicleSubcategory?>(
                 key: ValueKey('vehicle-${_selectedVehicleSubcategory?.name ?? 'all'}'),
@@ -367,6 +445,16 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
               minLines: 4,
               maxLines: 8,
               decoration: const InputDecoration(labelText: 'İlan Açıklaması'),
+              maxLength: 5000,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Açıklama zorunludur';
+                }
+                if (value.trim().length > 5000) {
+                  return 'Açıklama 5000 karakteri aşamaz';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 24),
             Text('Fotoğraflar', style: theme.textTheme.titleLarge),
@@ -540,12 +628,38 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
       final priceValue = double.tryParse(
             _priceController.text.replaceAll(',', '.')) ??
         0;
+      final selectedCategory = _category ?? ListingCategory.konut;
 
       if (_selectedCity == null) {
         throw AuthException('Lütfen ilan için bir il seçin.');
       }
 
-      if (_category == ListingCategory.arac) {
+      final normalizedPhone = normalizeTurkishPhone(user?.phone ?? '');
+      if (normalizedPhone.isEmpty) {
+        throw AuthException('Lütfen profilinizde telefon numarası ekleyin.');
+      }
+
+      CategoryNode? selectedGeneralNode;
+      CategoryNode? selectedDetailNode;
+
+      if (selectedCategory != ListingCategory.arac) {
+        final nodes = listingCategoryTree[selectedCategory] ?? const <CategoryNode>[];
+        if (nodes.isNotEmpty) {
+          selectedGeneralNode = findChildById(nodes, _selectedGeneralSubcategoryId);
+          if (selectedGeneralNode == null) {
+            throw AuthException('${categoryLabel(selectedCategory)} için alt kategori seçin.');
+          }
+          final detailCandidates = selectedGeneralNode.children;
+          if (detailCandidates.isNotEmpty) {
+            selectedDetailNode = findChildById(detailCandidates, _selectedGeneralDetailId);
+            if (selectedDetailNode == null) {
+              throw AuthException('${selectedGeneralNode.label} için alt seçenek seçin.');
+            }
+          }
+        }
+      }
+
+      if (selectedCategory == ListingCategory.arac) {
         if (_selectedVehicleSubcategory == null) {
           throw AuthException('Lütfen vasıta alt kategorisini seçin.');
         }
@@ -591,7 +705,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         currency: 'TL',
         images: images,
         description: _descriptionController.text.trim(),
-        category: _category ?? ListingCategory.konut,
+        category: selectedCategory,
         type: _type ?? ListingType.satilik,
         location: location,
         date: DateTime.now(),
@@ -600,23 +714,33 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         publisherId: ownerId,
         publisherAvatar: user?.avatarUrl ?? '',
         isPremium: false,
+        contactPhone: normalizedPhone,
+        status: ListingStatus.pending,
+        reviewNotes: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        subcategory: selectedGeneralNode?.label,
+        subcategoryDetail: selectedDetailNode?.label,
         vehicleSubcategory:
-            _category == ListingCategory.arac ? _selectedVehicleSubcategory : null,
-        brand: _category == ListingCategory.arac ? _selectedBrand : null,
-        model: _category == ListingCategory.arac ? _selectedModel : null,
+            selectedCategory == ListingCategory.arac ? _selectedVehicleSubcategory : null,
+        brand: selectedCategory == ListingCategory.arac ? _selectedBrand : null,
+        model: selectedCategory == ListingCategory.arac ? _selectedModel : null,
         engineType:
-            _category == ListingCategory.arac ? _selectedEngineType : null,
+            selectedCategory == ListingCategory.arac ? _selectedEngineType : null,
         fuelType:
-            _category == ListingCategory.arac ? _selectedFuelType : null,
-        transmission: _category == ListingCategory.arac ? _selectedTransmission : null,
+            selectedCategory == ListingCategory.arac ? _selectedFuelType : null,
+        transmission:
+            selectedCategory == ListingCategory.arac ? _selectedTransmission : null,
         condition:
-            _category == ListingCategory.arac ? _selectedVehicleCondition : null,
-        drivetrain: _category == ListingCategory.arac ? _selectedDrivetrain : null,
+            selectedCategory == ListingCategory.arac ? _selectedVehicleCondition : null,
+        drivetrain:
+            selectedCategory == ListingCategory.arac ? _selectedDrivetrain : null,
         bodyType:
-            _category == ListingCategory.arac && _bodyTypeController.text.trim().isNotEmpty
+            selectedCategory == ListingCategory.arac &&
+                    _bodyTypeController.text.trim().isNotEmpty
                 ? _bodyTypeController.text.trim()
                 : null,
-        power: _category == ListingCategory.arac
+        power: selectedCategory == ListingCategory.arac
             ? int.tryParse(_powerController.text.trim())
             : null,
         year: int.tryParse(_yearController.text.trim()),

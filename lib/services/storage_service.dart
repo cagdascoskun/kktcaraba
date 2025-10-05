@@ -43,4 +43,48 @@ class StorageService {
     final snapshot = await uploadTask.whenComplete(() {});
     return snapshot.ref.getDownloadURL();
   }
+
+  Future<String> uploadProfileAvatar({
+    required XFile file,
+    required String userId,
+  }) async {
+    final resolvedMime = file.mimeType ?? lookupMimeType(file.path) ?? 'image/jpeg';
+    final ref = _storage
+        .ref()
+        .child('user_avatars')
+        .child(userId)
+        .child('avatar.jpg');
+
+    UploadTask uploadTask;
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      uploadTask = ref.putData(
+        bytes,
+        SettableMetadata(contentType: resolvedMime),
+      );
+    } else {
+      uploadTask = ref.putFile(
+        File(file.path),
+        SettableMetadata(contentType: resolvedMime),
+      );
+    }
+
+    final snapshot = await uploadTask.whenComplete(() {});
+    return snapshot.ref.getDownloadURL();
+  }
+
+  Future<void> deleteProfileAvatar({required String userId}) async {
+    final ref = _storage
+        .ref()
+        .child('user_avatars')
+        .child(userId)
+        .child('avatar.jpg');
+    try {
+      await ref.delete();
+    } on FirebaseException catch (error) {
+      if (error.code != 'object-not-found') {
+        rethrow;
+      }
+    }
+  }
 }

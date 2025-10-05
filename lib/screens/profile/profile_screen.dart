@@ -3,12 +3,14 @@ import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
 import '../../state/app_state.dart';
+import '../../utils/formatters.dart';
 import '../../widgets/common_widgets.dart';
 import '../create_listing_screen.dart';
 import '../listing_collection_screen.dart';
 import '../promote_listing_screen.dart';
 import '../settings_screen.dart';
 import '../support_center_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -24,6 +26,7 @@ class ProfileScreen extends StatelessWidget {
           id: 'guest',
           name: 'Misafir Kullanıcı',
           email: 'guest@kktccaraba.com',
+          phone: '',
           company: '',
           bio:
               'Hesabınızla giriş yaparak portföyünüzü yönetebilir, ilanlarınızın performansını takip edebilirsiniz.',
@@ -95,6 +98,15 @@ class ProfileScreen extends StatelessWidget {
                                   color: Colors.white70,
                                 ),
                               ),
+                              if (!isGuest && user.phone.trim().isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    formatTurkishPhone(user.phone),
+                                    style: theme.textTheme.bodyMedium!
+                                        .copyWith(color: Colors.white70),
+                                  ),
+                                ),
                               if (user.company.trim().isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
@@ -130,6 +142,18 @@ class ProfileScreen extends StatelessWidget {
                     height: 1.5,
                   ),
                 ),
+                if (!isGuest) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const EditProfileScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Profili Düzenle'),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text('Hızlı İşlemler', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 16),

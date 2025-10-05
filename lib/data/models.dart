@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 enum ListingType { satilik, kiralik, hizmet, ikinciEl }
 
+enum ListingStatus { pending, approved, rejected }
+
 enum ListingCategory {
   konut,
   arac,
@@ -82,6 +84,16 @@ class Listing {
     required this.publisherId,
     required this.publisherAvatar,
     required this.isPremium,
+    required this.contactPhone,
+    required this.status,
+    this.subcategory,
+    this.subcategoryDetail,
+    this.reviewNotes,
+    this.reviewedBy,
+    this.reviewedAt,
+    this.premiumPackage,
+    this.premiumPurchasedAt,
+    this.premiumExpiresAt,
     this.vehicleSubcategory,
     this.brand,
     this.model,
@@ -113,6 +125,16 @@ class Listing {
   final String publisherId;
   final String publisherAvatar;
   final bool isPremium;
+  final String contactPhone;
+  final ListingStatus status;
+  final String? subcategory;
+  final String? subcategoryDetail;
+  final String? reviewNotes;
+  final String? reviewedBy;
+  final DateTime? reviewedAt;
+  final String? premiumPackage;
+  final DateTime? premiumPurchasedAt;
+  final DateTime? premiumExpiresAt;
   final VehicleSubcategory? vehicleSubcategory;
   final String? brand;
   final String? model;
@@ -129,39 +151,82 @@ class Listing {
   final int? mileage;
   final List<ListingTag> tags;
 
-  Map<String, dynamic> toMap() => {
-        'title': title,
-        'price': price,
-        'currency': currency,
-        'images': images,
-        'description': description,
-        'category': category.name,
-        'type': type.name,
-        'location': location,
-        'publishedAt': Timestamp.fromDate(date),
-        'publisher': publisher,
-        'publisherId': publisherId,
-        'publisherAvatar': publisherAvatar,
-        'isPremium': isPremium,
-        'vehicleSubcategory': vehicleSubcategory?.name,
-        'brand': brand,
-        'model': model,
-        'engineType': engineType,
-        'fuelType': fuelType?.name,
-        'transmission': transmission?.name,
-        'condition': condition?.name,
-        'drivetrain': drivetrain?.name,
-        'bodyType': bodyType,
-        'power': power,
-        'rooms': rooms,
-        'size': size,
-        'year': year,
-        'mileage': mileage,
-        'tags': tags.map((tag) => tag.toMap()).toList(),
-      };
+  bool get isApproved => status == ListingStatus.approved;
+  bool get isPending => status == ListingStatus.pending;
+
+  Map<String, dynamic> toMap() {
+    final map = <String, dynamic>{
+      'title': title,
+      'price': price,
+      'currency': currency,
+      'images': images,
+      'description': description,
+      'category': category.name,
+      'type': type.name,
+      'location': location,
+      'publishedAt': Timestamp.fromDate(date),
+      'publisher': publisher,
+      'publisherId': publisherId,
+      'publisherAvatar': publisherAvatar,
+      'contactPhone': contactPhone,
+      'status': status.name,
+      'subcategory': subcategory,
+      'subcategoryDetail': subcategoryDetail,
+      'reviewNotes': reviewNotes,
+      'reviewedBy': reviewedBy,
+      'vehicleSubcategory': vehicleSubcategory?.name,
+      'brand': brand,
+      'model': model,
+      'engineType': engineType,
+      'fuelType': fuelType?.name,
+      'transmission': transmission?.name,
+      'condition': condition?.name,
+      'drivetrain': drivetrain?.name,
+      'bodyType': bodyType,
+      'power': power,
+      'rooms': rooms,
+      'size': size,
+      'year': year,
+      'mileage': mileage,
+      'tags': tags.map((tag) => tag.toMap()).toList(),
+    };
+
+    if (premiumPackage != null) {
+      map['premiumPackage'] = premiumPackage;
+    }
+    if (premiumPurchasedAt != null) {
+      map['premiumPurchasedAt'] = Timestamp.fromDate(premiumPurchasedAt!);
+    }
+    if (premiumExpiresAt != null) {
+      map['premiumExpiresAt'] = Timestamp.fromDate(premiumExpiresAt!);
+    }
+
+    final bool premiumActive = premiumExpiresAt != null
+        ? premiumExpiresAt!.isAfter(DateTime.now())
+        : isPremium;
+    map['isPremium'] = premiumActive;
+
+    return map;
+  }
 
   factory Listing.fromDocument(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
+    final purchasedAt = (data['premiumPurchasedAt'] as Timestamp?)?.toDate();
+    final expiresAt = (data['premiumExpiresAt'] as Timestamp?)?.toDate();
+    final rawIsPremium = data['isPremium'] as bool? ?? false;
+    final effectivePremium = expiresAt != null
+        ? expiresAt.isAfter(DateTime.now())
+        : rawIsPremium;
+    final statusValue = data['status'] as String?;
+    final ListingStatus status = () {
+      if (statusValue != null) {
+        try {
+          return ListingStatus.values
+              .firstWhere((value) => value.name == statusValue);
+        } catch (_) {}
+      }
+      return ListingStatus.approved;
+    }();
     return Listing(
       id: doc.id,
       title: data['title'] as String? ?? 'İlan',
@@ -182,7 +247,17 @@ class Listing {
       publisher: data['publisher'] as String? ?? 'Bilinmeyen',
       publisherId: data['publisherId'] as String? ?? '',
       publisherAvatar: data['publisherAvatar'] as String? ?? '',
-      isPremium: data['isPremium'] as bool? ?? false,
+      isPremium: effectivePremium,
+      contactPhone: data['contactPhone'] as String? ?? '',
+      status: status,
+      subcategory: data['subcategory'] as String?,
+      subcategoryDetail: data['subcategoryDetail'] as String?,
+      reviewNotes: data['reviewNotes'] as String?,
+      reviewedBy: data['reviewedBy'] as String?,
+      reviewedAt: (data['reviewedAt'] as Timestamp?)?.toDate(),
+      premiumPackage: data['premiumPackage'] as String?,
+      premiumPurchasedAt: purchasedAt,
+      premiumExpiresAt: expiresAt,
       vehicleSubcategory: () {
         final type = data['vehicleSubcategory'] as String?;
         if (type == null || type.isEmpty) {
@@ -266,6 +341,7 @@ class AppUser {
     required this.id,
     required this.name,
     required this.email,
+    required this.phone,
     this.company = '',
     this.bio = '',
     this.avatarUrl = '',
@@ -275,6 +351,7 @@ class AppUser {
   final String id;
   final String name;
   final String email;
+  final String phone;
   final String company;
   final String bio;
   final String avatarUrl;
@@ -283,6 +360,7 @@ class AppUser {
   AppUser copyWith({
     String? name,
     String? email,
+    String? phone,
     String? company,
     String? bio,
     String? avatarUrl,
@@ -292,6 +370,7 @@ class AppUser {
       id: id,
       name: name ?? this.name,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
       company: company ?? this.company,
       bio: bio ?? this.bio,
       avatarUrl: avatarUrl ?? this.avatarUrl,
@@ -302,6 +381,7 @@ class AppUser {
   Map<String, dynamic> toMap() => {
         'name': name,
         'email': email,
+        'phone': phone,
         'company': company,
         'bio': bio,
         'avatarUrl': avatarUrl,
@@ -315,6 +395,7 @@ class AppUser {
       id: doc.id,
       name: data['name'] as String? ?? 'Kullanıcı',
       email: data['email'] as String? ?? '',
+      phone: data['phone'] as String? ?? '',
       company: data['company'] as String? ?? '',
       bio: data['bio'] as String? ?? '',
       avatarUrl: data['avatarUrl'] as String? ?? '',

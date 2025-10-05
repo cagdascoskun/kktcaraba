@@ -179,6 +179,67 @@ String normalizePhoneNumber(String phone) {
   return digitsOnly;
 }
 
+String normalizeTurkishPhone(String phone) {
+  var digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.isEmpty) return '';
+  if (digits.startsWith('00')) {
+    digits = digits.substring(2);
+  }
+  if (digits.startsWith('90') && digits.length > 12) {
+    digits = digits.substring(digits.length - 12);
+  }
+  if (digits.startsWith('90')) {
+    digits = digits.substring(2);
+  }
+  if (digits.startsWith('0')) {
+    digits = digits.substring(1);
+  }
+  if (digits.length > 10) {
+    digits = digits.substring(digits.length - 10);
+  }
+  if (digits.length != 10) {
+    return '';
+  }
+  return '90$digits';
+}
+
+String formatTurkishPhone(String phone) {
+  final normalized = normalizeTurkishPhone(phone);
+  if (normalized.isEmpty) return '';
+  final local = normalized.substring(2);
+  if (local.length == 10) {
+    final part1 = local.substring(0, 3);
+    final part2 = local.substring(3, 6);
+    final part3 = local.substring(6, 8);
+    final part4 = local.substring(8, 10);
+    return '+90 $part1 $part2 $part3 $part4';
+  }
+  return '+90 ${formatPhoneDisplay(local)}';
+}
+
+String formatPhoneDisplay(String phone) {
+  final normalized = normalizePhoneNumber(phone);
+  if (normalized.isEmpty) return '';
+
+  String prefix = '';
+  String digits = normalized;
+  if (digits.startsWith('+')) {
+    prefix = '+';
+    digits = digits.substring(1);
+  }
+
+  final groups = <String>[];
+  for (var i = 0; i < digits.length; i += 3) {
+    final end = (i + 3 <= digits.length) ? i + 3 : digits.length;
+    groups.add(digits.substring(i, end));
+  }
+
+  if (prefix.isNotEmpty) {
+    return '$prefix ${groups.join(' ')}';
+  }
+  return groups.join(' ');
+}
+
 Future<void> launchExternalUrl(BuildContext context, Uri uri) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   try {
@@ -201,7 +262,13 @@ Future<void> openWhatsApp(
   String phone,
   String message,
 ) async {
-  final normalized = normalizePhoneNumber(phone).replaceFirst('+', '');
+  final normalized = normalizeTurkishPhone(phone);
+  if (normalized.isEmpty) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Telefon numarası bulunamadı.')),
+    );
+    return;
+  }
   final uri = Uri.parse(
     'https://wa.me/$normalized?text=${Uri.encodeComponent(message)}',
   );

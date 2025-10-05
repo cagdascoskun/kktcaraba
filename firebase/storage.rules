@@ -21,5 +21,11 @@ service firebase.storage {
             || userId == 'guest')
           && (isDeleteRequest() || isValidImageUpload());
     }
+
+    match /user_avatars/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == userId
+          && (isDeleteRequest() || isValidImageUpload());
+    }
   }
 }

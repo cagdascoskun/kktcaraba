@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import 'models.dart';
+import '../utils/formatters.dart';
 
 class ListingRepository {
   ListingRepository({FirebaseFirestore? firestore})
@@ -25,19 +26,23 @@ class ListingRepository {
 
   List<Listing> get listings => List.unmodifiable(_listings);
 
-  List<Listing> get featuredListings =>
-      _listings.where((listing) => listing.isPremium).toList();
+  List<Listing> get approvedListings =>
+      _listings.where((listing) => listing.isApproved).toList();
+
+  List<Listing> get featuredListings => _listings
+      .where((listing) => listing.isPremium && listing.isApproved)
+      .toList();
 
   List<Listing> get recentListings => List<Listing>.from(_listings);
 
-  List<Listing> listingsByCategory(ListingCategory category) => _listings
+  List<Listing> listingsByCategory(ListingCategory category) => approvedListings
       .where((listing) => listing.category == category)
       .toList();
 
   List<Listing> listingsByVehicleSubcategory(
     VehicleSubcategory subcategory,
   ) =>
-      _listings
+      approvedListings
           .where(
             (listing) =>
                 listing.category == ListingCategory.arac &&
@@ -46,15 +51,18 @@ class ListingRepository {
           .toList();
 
   List<Listing> premiumShowcaseByCategory(ListingCategory category) => _listings
-      .where((listing) => listing.category == category && listing.isPremium)
+      .where((listing) =>
+          listing.category == category &&
+          listing.isPremium &&
+          listing.isApproved)
       .toList();
 
   List<Listing> search(String query) {
     final cleanQuery = query.toLowerCase().trim();
     if (cleanQuery.isEmpty) {
-      return List<Listing>.from(_listings);
+      return List<Listing>.from(approvedListings);
     }
-    return _listings.where((listing) {
+    return approvedListings.where((listing) {
       final haystack = '${listing.title} ${listing.description} ${listing.location}'.
           toLowerCase();
       return haystack.contains(cleanQuery);
@@ -84,6 +92,10 @@ class ListingRepository {
 
   Future<void> updateListing(Listing listing) async {
     await _collection.doc(listing.id).update(listing.toMap());
+  }
+
+  Future<void> updateListingFields(String listingId, Map<String, dynamic> data) async {
+    await _collection.doc(listingId).update(data);
   }
 
   Future<void> deleteListing(String listingId) async {
@@ -125,14 +137,33 @@ class UserRepository {
 
   Future<void> ensureUserDocument(AppUser user) async {
     final docRef = _collection.doc(user.id);
-    final Map<String, dynamic> payload = {
+    final snapshot = await docRef.get();
+    final sanitizedPhone = normalizeTurkishPhone(user.phone);
+
+    String phoneToPersist = sanitizedPhone;
+    if (snapshot.exists) {
+      final existing = snapshot.data();
+      final existingPhone = normalizeTurkishPhone(existing?['phone'] as String? ?? '');
+      if (phoneToPersist.isEmpty) {
+        phoneToPersist = existingPhone;
+      }
+    } else if (phoneToPersist.isEmpty) {
+      throw AuthException('Telefon numarası bulunamadı. Lütfen yeniden giriş yapın.');
+    }
+
+    final payload = <String, dynamic>{
       'name': user.name,
       'email': user.email,
       'company': user.company,
       'bio': user.bio,
       'avatarUrl': user.avatarUrl,
-      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (!snapshot.exists) 'createdAt': FieldValue.serverTimestamp(),
     };
+
+    if (phoneToPersist.isNotEmpty) {
+      payload['phone'] = phoneToPersist;
+    }
 
     if (user.favorites.isNotEmpty) {
       payload['favorites'] = FieldValue.arrayUnion(user.favorites);
@@ -146,6 +177,12 @@ class UserRepository {
             snapshot.exists ? AppUser.fromDocument(snapshot) : null,
       );
 
+  Future<AppUser?> fetchUser(String userId) async {
+    final snapshot = await _collection.doc(userId).get();
+    if (!snapshot.exists) return null;
+    return AppUser.fromDocument(snapshot);
+  }
+
   Future<void> updateFavorites({
     required String userId,
     required String listingId,
@@ -158,7 +195,13 @@ class UserRepository {
   }
 
   Future<void> updateProfile(String userId, Map<String, dynamic> data) async {
-    await _collection.doc(userId).update(data);
+    final sanitizedPhone =
+        data.containsKey('phone') ? normalizeTurkishPhone(data['phone'] as String? ?? '') : null;
+    await _collection.doc(userId).update({
+      ...data,
+      if (sanitizedPhone != null && sanitizedPhone.isNotEmpty) 'phone': sanitizedPhone,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 }
 

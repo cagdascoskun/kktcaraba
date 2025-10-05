@@ -24,6 +24,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -33,6 +34,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _signInPasswordController.dispose();
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -57,11 +59,12 @@ class _AuthScreenState extends State<AuthScreen> {
           return;
         }
         setState(() => _isSubmitting = true);
-        await appState.register(
-          name: _nameController.text.trim(),
-          email: _emailController.text.trim().toLowerCase(),
-          password: _passwordController.text,
-        );
+          await appState.register(
+            name: _nameController.text.trim(),
+            email: _emailController.text.trim().toLowerCase(),
+            phone: _phoneController.text.trim(),
+            password: _passwordController.text,
+          );
       } else {
         if (!_signInFormKey.currentState!.validate()) {
           return;
@@ -257,6 +260,26 @@ class _AuthScreenState extends State<AuthScreen> {
               }
               if (!value.contains('@')) {
                 return 'Geçerli bir e-posta girin';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+         TextFormField(
+           controller: _phoneController,
+           keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Telefon Numarası',
+              prefixText: '+90 ',
+            ),
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              final digitsOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+              if (digitsOnly.isEmpty) {
+                return 'Telefon numarası giriniz';
+              }
+              if (digitsOnly.length < 10) {
+                return 'Telefon numarası eksik görünüyor';
               }
               return null;
             },

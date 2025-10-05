@@ -1,8 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function nonEmptyString(field) {
@@ -25,27 +30,54 @@ service cloud.firestore {
       return field == null || field is list;
     }
 
+    function optionalTimestamp(field) {
+      return field == null || field is timestamp;
+    }
+
+    function hasField(data, field) {
+      return data.keys().hasAny([field]);
+    }
+
+    function isModerator() {
+      return isSignedIn() &&
+        (request.auth.token.role == 'moderator' || request.auth.token.role == 'admin');
+    }
+
     function validVehicleListing(data) {
       return nonEmptyString(data.vehicleSubcategory)
           && nonEmptyString(data.brand)
           && nonEmptyString(data.model)
-          && (data.engineType == null || nonEmptyString(data.engineType))
-          && (data.fuelType == null || nonEmptyString(data.fuelType))
-          && (data.transmission == null || nonEmptyString(data.transmission))
-          && (data.condition == null || nonEmptyString(data.condition));
+          && nonEmptyString(data.fuelType)
+          && nonEmptyString(data.transmission)
+          && nonEmptyString(data.condition)
+          && optionalString(data.engineType)
+          && optionalString(data.drivetrain)
+          && optionalString(data.bodyType)
+          && optionalNumber(data.power)
+          && optionalNumber(data.year)
+          && optionalNumber(data.mileage);
     }
 
     function validListing(data) {
       return nonEmptyString(data.title)
-          && data.price is number && data.price >= 0
+          && data.title.size() <= 200
+          && data.price is number
+          && data.price >= 0
+          && data.price <= 100000000
           && nonEmptyString(data.currency)
-          && data.images is list && data.images.size() > 0 && data.images.size() <= 20
+          && data.images is list
+          && data.images.size() > 0
+          && data.images.size() <= 20
           && nonEmptyString(data.category)
+          && data.category in ['konut','arac','emlak','elektronik','hizmet','isFirsati','hayvan','diger']
           && nonEmptyString(data.type)
+          && data.type in ['satilik','kiralik','hizmet','ikinciEl']
           && nonEmptyString(data.location)
-          && optionalString(data.description)
-          && optionalString(data.publisher)
+          && nonEmptyString(data.description)
+          && data.description.size() <= 5000
+          && nonEmptyString(data.publisher)
           && nonEmptyString(data.publisherId)
+          && nonEmptyString(data.contactPhone)
           && optionalString(data.publisherAvatar)
           && data.isPremium is bool
           && data.publishedAt is timestamp
@@ -64,30 +96,81 @@ service cloud.firestore {
           && optionalNumber(data.mileage)
           && optionalNumber(data.size)
           && optionalList(data.tags)
-          && optionalBool(data.isFeatured)
-          && optionalBool(data.isHighlighted)
           && (data.category != 'arac' || validVehicleListing(data));
     }
 
     function validGuestListing(data) {
       return request.auth == null
           && data.publisherId == 'guest'
+          && nonEmptyString(data.contactPhone)
           && data.isPremium == false
           && validListing(data);
     }
 
+    function isListingOwner(listingData) {
+      return isSignedIn() && request.auth.uid == listingData.publisherId;
+    }
+
     match /users/{userId} {
-      allow read, update, delete: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+
+      allow create: if isSignedIn()
+          && request.auth.uid == userId
+          && nonEmptyString(request.resource.data.name)
+          && nonEmptyString(request.resource.data.email)
+          && nonEmptyString(request.resource.data.phone)
+          && request.resource.data.email == request.auth.token.email
+          && optionalString(request.resource.data.company)
+          && optionalString(request.resource.data.bio)
+          && optionalString(request.resource.data.avatarUrl)
+          && request.resource.data.favorites is list;
+
+      allow update: if isOwner(userId)
+          && nonEmptyString(request.resource.data.name)
+          && nonEmptyString(request.resource.data.email)
+          && nonEmptyString(request.resource.data.phone)
+          && optionalString(request.resource.data.company)
+          && optionalString(request.resource.data.bio)
+          && optionalString(request.resource.data.avatarUrl)
+          && request.resource.data.favorites is list
+          && request.resource.data.favorites.size() <= 1000;
+
+      allow delete: if isOwner(userId);
     }
 
     match /listings/{listingId} {
       allow read: if true;
-      allow create: if (isSignedIn() && request.auth.uid == request.resource.data.publisherId && validListing(request.resource.data))
-          || validGuestListing(request.resource.data);
-      allow update, delete: if isSignedIn()
-          && request.auth.uid == resource.data.publisherId
-          && validListing(request.resource.data);
+
+      allow create: if (
+            (isSignedIn()
+              && request.auth.uid == request.resource.data.publisherId
+              && validListing(request.resource.data)
+              && (!hasField(request.resource.data, 'status')
+                  || request.resource.data.status == 'pending'))
+            || (validGuestListing(request.resource.data)
+                && (!hasField(request.resource.data, 'status')
+                    || request.resource.data.status == 'pending'))
+          )
+          && (request.resource.data.isPremium == false || isSignedIn());
+
+      allow update: if (
+            isListingOwner(resource.data)
+            && validListing(request.resource.data)
+            && request.resource.data.publisherId == resource.data.publisherId
+            && (
+              hasField(resource.data, 'status')
+                ? request.resource.data.status == resource.data.status
+                : !hasField(request.resource.data, 'status')
+            )
+            && (request.resource.data.isPremium == resource.data.isPremium || isSignedIn())
+          )
+          || (
+            isModerator()
+            && validListing(request.resource.data)
+            && request.resource.data.publisherId == resource.data.publisherId
+          );
+
+      allow delete: if isListingOwner(resource.data);
     }
   }
 }

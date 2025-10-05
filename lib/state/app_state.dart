@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -11,6 +12,7 @@ import '../data/car_models.dart';
 import '../data/models.dart';
 import '../data/repositories.dart';
 import '../services/storage_service.dart';
+import '../utils/formatters.dart';
 
 enum SortOption { newest, priceLowToHigh, priceHighToLow }
 
@@ -63,7 +65,7 @@ class AppState extends ChangeNotifier {
   bool get isAuthenticated => _isAuthenticated;
   AppUser? get currentUser => _currentUser;
 
-  List<Listing> get listings => repository.listings;
+  List<Listing> get listings => repository.approvedListings;
   List<Listing> get premiumListings => repository.featuredListings;
   List<Listing> get recentListings => repository.recentListings;
 
@@ -155,6 +157,121 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<String> uploadProfileAvatar(XFile file) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      throw AuthException('Lütfen önce giriş yapın.');
+    }
+    return _storageService.uploadProfileAvatar(file: file, userId: userId);
+  }
+
+  Future<void> removeProfileAvatar() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      throw AuthException('Lütfen önce giriş yapın.');
+    }
+    await _storageService.deleteProfileAvatar(userId: userId);
+  }
+
+  Future<void> updateUserProfile({
+    required String name,
+    required String phone,
+    String? company,
+    String? bio,
+    XFile? avatarFile,
+    bool removeAvatar = false,
+  }) async {
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
+      throw AuthException('Oturum açmanız gerekiyor.');
+    }
+
+    final sanitizedPhone = normalizeTurkishPhone(phone);
+    if (sanitizedPhone.isEmpty) {
+      throw AuthException('Telefon numarası geçerli değil.');
+    }
+
+    String avatarUrl = _currentUser?.avatarUrl ?? '';
+
+    if (avatarFile != null) {
+      avatarUrl = await uploadProfileAvatar(avatarFile);
+      removeAvatar = false;
+    } else if (removeAvatar) {
+      await removeProfileAvatar();
+      avatarUrl = '';
+    }
+
+    final data = {
+      'name': name.trim(),
+      'phone': sanitizedPhone,
+      'company': (company ?? '').trim(),
+      'bio': (bio ?? '').trim(),
+      'avatarUrl': avatarUrl,
+    };
+
+    await _userRepository.updateProfile(firebaseUser.uid, data);
+    await firebaseUser.updateDisplayName(name.trim());
+
+    final updatedUser = (_currentUser ?? _mapFirebaseUser(firebaseUser)).copyWith(
+      name: name.trim(),
+      phone: sanitizedPhone,
+      company: (company ?? '').trim(),
+      bio: (bio ?? '').trim(),
+      avatarUrl: avatarUrl,
+    );
+
+    _currentUser = updatedUser;
+    notifyListeners();
+  }
+
+  Future<void> promoteListing({
+    required String listingId,
+    required int durationDays,
+    required String packageId,
+  }) async {
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
+      throw AuthException('Oturum açmanız gerekiyor.');
+    }
+
+    final listing = repository.listings.firstWhere(
+      (item) => item.id == listingId,
+      orElse: () => throw AuthException('İlan bulunamadı.'),
+    );
+
+    if (listing.publisherId != firebaseUser.uid) {
+      throw AuthException('Bu ilan size ait değil.');
+    }
+
+    final now = DateTime.now();
+    final baseDate = (listing.premiumExpiresAt != null &&
+            listing.premiumExpiresAt!.isAfter(now))
+        ? listing.premiumExpiresAt!
+        : now;
+    final expiresAt = baseDate.add(Duration(days: durationDays));
+
+    await repository.updateListingFields(listingId, {
+      'isPremium': true,
+      'premiumPackage': packageId,
+      'premiumPurchasedAt': Timestamp.fromDate(now),
+      'premiumExpiresAt': Timestamp.fromDate(expiresAt),
+    });
+
+    await _analytics.logEvent(
+      name: 'listing_promoted',
+      parameters: {
+        'listing_id': listingId,
+        'package': packageId,
+        'duration_days': durationDays,
+      },
+    );
+  }
+
+  Future<String?> fetchUserPhone(String userId) async {
+    final user = await _userRepository.fetchUser(userId);
+    return user?.phone;
+  }
+
   Future<void> addListing(Listing listing) async {
     if (listing.category == ListingCategory.arac) {
       if ((listing.brand ?? '').isEmpty) {
@@ -194,6 +311,16 @@ class AppState extends ChangeNotifier {
           ? resolvedPublisherName.trim()
           : 'KKTC Caraba Kullanıcısı';
 
+    var contactPhoneRaw = payload['contactPhone'] as String? ?? '';
+    var normalizedContactPhone = normalizeTurkishPhone(contactPhoneRaw);
+    if (normalizedContactPhone.isEmpty) {
+      normalizedContactPhone = normalizeTurkishPhone(_currentUser?.phone ?? '');
+    }
+    if (normalizedContactPhone.isEmpty) {
+      throw AuthException('Telefon numarası eksik. Lütfen profilinizi güncelleyin.');
+    }
+    payload['contactPhone'] = normalizedContactPhone;
+
     await repository.saveListing(listing.id, payload);
     await _analytics.logEvent(
       name: 'listing_created',
@@ -201,7 +328,7 @@ class AppState extends ChangeNotifier {
         'listing_id': listing.id,
         'category': listing.category.name,
         'type': listing.type.name,
-        'is_premium': listing.isPremium,
+        'is_premium': listing.isPremium ? 1 : 0,
         if (listing.vehicleSubcategory != null)
           'vehicle_subcategory': listing.vehicleSubcategory!.name,
       },
@@ -223,9 +350,14 @@ class AppState extends ChangeNotifier {
   Future<void> register({
     required String name,
     required String email,
+    required String phone,
     required String password,
   }) async {
     try {
+      final sanitizedPhone = normalizeTurkishPhone(phone);
+      if (sanitizedPhone.isEmpty) {
+        throw AuthException('Telefon numarası geçerli değil.');
+      }
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -235,8 +367,10 @@ class AppState extends ChangeNotifier {
       if (user != null) {
         await user.updateDisplayName(name);
         await user.reload();
-        final mapped = _mapFirebaseUser(user).copyWith(name: name);
+        final mapped =
+            _mapFirebaseUser(user).copyWith(name: name, phone: sanitizedPhone);
         await _userRepository.ensureUserDocument(mapped);
+        await _bootstrapAuthenticatedUser(user);
       }
 
       _isGuestSession = false;
@@ -345,6 +479,7 @@ class AppState extends ChangeNotifier {
           ? displayName
           : (user.email ?? 'KKTC Caraba Kullanıcısı'),
       email: user.email ?? '',
+      phone: '',
       company: '',
       bio: '',
       avatarUrl: user.photoURL ?? '',

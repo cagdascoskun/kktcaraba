@@ -8,6 +8,103 @@ import '../utils/formatters.dart';
 
 typedef ListingTapCallback = void Function(Listing listing);
 
+const Duration _newBadgeThreshold = Duration(hours: 48);
+
+List<String> _primaryListingAttributes(Listing listing) {
+  final attributes = <String>[];
+
+  if (listing.subcategoryDetail != null && listing.subcategoryDetail!.trim().isNotEmpty) {
+    attributes.add(listing.subcategoryDetail!.trim());
+  } else if (listing.subcategory != null && listing.subcategory!.trim().isNotEmpty) {
+    attributes.add(listing.subcategory!.trim());
+  }
+
+  switch (listing.category) {
+    case ListingCategory.konut:
+    case ListingCategory.emlak:
+      if (listing.rooms != null && listing.rooms! > 0) {
+        attributes.add('${listing.rooms} oda');
+      }
+      if (listing.size != null && listing.size! > 0) {
+        attributes.add('${_formatThousands(listing.size!)} m²');
+      }
+      break;
+    case ListingCategory.arac:
+      if (listing.year != null) {
+        attributes.add('${listing.year}');
+      }
+      if (listing.mileage != null && listing.mileage! > 0) {
+        attributes.add('${_formatThousands(listing.mileage!)} km');
+      }
+      if (listing.fuelType != null) {
+        attributes.add(fuelTypeLabel(listing.fuelType!));
+      }
+      if (listing.transmission != null) {
+        attributes.add(transmissionLabel(listing.transmission!));
+      }
+      break;
+    default:
+      if (listing.size != null && listing.size! > 0) {
+        attributes.add('${_formatThousands(listing.size!)} m²');
+      }
+      break;
+  }
+
+  attributes.add(listingTypeLabel(listing.type));
+
+  return attributes.where((element) => element.trim().isNotEmpty).toList();
+}
+
+String _formatThousands(num value) {
+  final int normalized = value.isFinite ? value.round() : 0;
+  final text = normalized.toString();
+  return text.replaceAllMapped(
+    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+    (match) => '${match[1]}.',
+  );
+}
+
+class _InfoBadge extends StatelessWidget {
+  const _InfoBadge({
+    required this.label,
+    this.icon,
+    this.backgroundColor = const Color(0xF2FFFFFF),
+    this.textColor = Colors.black87,
+  });
+
+  final String label;
+  final IconData? icon;
+  final Color backgroundColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = Theme.of(context)
+        .textTheme
+        .labelSmall
+        ?.copyWith(color: textColor, fontWeight: FontWeight.w600);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black12.withValues(alpha: .2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: textColor),
+            const SizedBox(width: 4),
+          ],
+          Text(label, style: textStyle),
+        ],
+      ),
+    );
+  }
+}
+
 class ListingCard extends StatelessWidget {
   const ListingCard({
     super.key,
@@ -20,94 +117,107 @@ class ListingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final attributes = _primaryListingAttributes(listing);
+    final bool isNew = DateTime.now().difference(listing.date) <= _newBadgeThreshold;
+
+    final badges = <Widget>[
+      if (isNew)
+        _InfoBadge(
+          label: 'Yeni',
+          backgroundColor: theme.colorScheme.primary,
+          textColor: Colors.white,
+        ),
+      _InfoBadge(
+        label: timeAgo(listing.date),
+        backgroundColor: Colors.black.withValues(alpha: .55),
+        textColor: Colors.white,
+      ),
+      if (listing.isPremium)
+        _InfoBadge(
+          label: 'Premium',
+          icon: Icons.star_rounded,
+          backgroundColor: Colors.amber.shade200,
+          textColor: Colors.amber.shade900,
+        ),
+    ];
+
     return GestureDetector(
       onTap: onTap != null ? () => onTap!(listing) : null,
       child: Card(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 4,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              child: Stack(
-                children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      listing.images.first,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.black12,
-                          child: const Center(child: CircularProgressIndicator()),
-                        );
-                      },
-                    ),
+            Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    listing.images.first,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: Colors.black12,
+                        child: const Center(child: CircularProgressIndicator()),
+                      );
+                    },
                   ),
-                  if (listing.isPremium)
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                            SizedBox(width: 4),
-                            Text('Premium', style: TextStyle(fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  Positioned(
-                    top: 16,
-                    right: 16,
-                    child: ListingFavoriteButton(listingId: listing.id),
+                ),
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: badges,
                   ),
-                ],
-              ),
+                ),
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: ListingFavoriteButton(listingId: listing.id),
+                ),
+              ],
             ),
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    listing.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium!.copyWith(fontSize: 17),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
                     formatPrice(listing.price, listing.currency),
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on_rounded,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: .8),
+                  if (attributes.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      attributes.join('  |  '),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          listing.location,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium!
-                              .copyWith(color: Colors.black54),
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Text(
+                    listing.location,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.black54),
                   ),
+                  if (listing.title.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      listing.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -130,86 +240,9 @@ class ListingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap != null ? () => onTap!(listing) : null,
-      child: Card(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                bottomLeft: Radius.circular(20),
-              ),
-              child: Image.network(
-                listing.images.first,
-                width: 120,
-                height: 120,
-                fit: BoxFit.cover,
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            listing.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ListingFavoriteButton(
-                          listingId: listing.id,
-                          compact: true,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      formatPrice(listing.price, listing.currency),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: .7),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          listing.location,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium!
-                              .copyWith(color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      timeAgo(listing.date),
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.black45),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return ListingCard(
+      listing: listing,
+      onTap: onTap,
     );
   }
 }

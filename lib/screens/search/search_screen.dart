@@ -9,9 +9,8 @@ import '../../widgets/common_widgets.dart';
 import '../../widgets/filter_widgets.dart';
 import '../../widgets/listing_widgets.dart';
 import '../../widgets/filter_drawer.dart';
-import '../category_showcase_screen.dart';
 import '../listing_detail_screen.dart';
-import 'vehicle_categories_screen.dart';
+import 'category_tree_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -491,20 +490,9 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: _CategoryList(
                   categories: _categories,
                   onTap: (category) {
-                    if (category == ListingCategory.arac) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const VehicleCategoriesScreen(),
-                        ),
-                      );
-                      return;
-                    }
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => CategoryShowcaseScreen(
-                          category: category,
-                          showPremium: false,
-                        ),
+                        builder: (_) => CategoryTreeScreen(category: category),
                       ),
                     );
                   },

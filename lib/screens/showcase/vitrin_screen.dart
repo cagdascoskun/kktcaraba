@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../state/app_state.dart';
 import '../../utils/formatters.dart';
-import '../../widgets/listing_widgets.dart';
 import '../listing_detail_screen.dart';
 import '../promote_listing_screen.dart';
 
@@ -15,9 +14,17 @@ class VitrinScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final appState = context.watch<AppState>();
-    final List<Listing> featured =
-        List<Listing>.from(appState.premiumListings)
-          ..sort((a, b) => b.date.compareTo(a.date));
+    final now = DateTime.now();
+    final List<Listing> featured = appState.premiumListings
+        .where((listing) =>
+            listing.premiumExpiresAt != null &&
+            listing.premiumExpiresAt!.isAfter(now))
+        .toList()
+      ..sort((a, b) {
+        final aDate = a.premiumExpiresAt ?? a.date;
+        final bDate = b.premiumExpiresAt ?? b.date;
+        return bDate.compareTo(aDate);
+      });
 
     final Map<ListingCategory, int> categoryCounts = <ListingCategory, int>{};
     for (final listing in featured) {
@@ -110,33 +117,96 @@ class VitrinScreen extends StatelessWidget {
         else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-            sliver: SliverList(
+            sliver: SliverGrid(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final listing = featured[index];
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index == featured.length - 1 ? 0 : 20,
-                    ),
-                    child: ListingCard(
-                      listing: listing,
-                      onTap: (selected) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ListingDetailScreen(
-                              listing: selected,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  );
+                  return _VitrinGridCard(listing: listing);
                 },
                 childCount: featured.length,
+              ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.68,
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+class _VitrinGridCard extends StatelessWidget {
+  const _VitrinGridCard({required this.listing});
+
+  final Listing listing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ListingDetailScreen(listing: listing),
+        ),
+      ),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 4 / 3,
+              child: listing.images.isNotEmpty
+                  ? Image.network(
+                      listing.images.first,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      color: theme.colorScheme.primary.withValues(alpha: .08),
+                      child: Icon(Icons.image_outlined,
+                          size: 42, color: theme.colorScheme.primary),
+                  ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      formatPrice(listing.price, listing.currency),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium!
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      listing.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      listing.location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          theme.textTheme.bodySmall!.copyWith(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

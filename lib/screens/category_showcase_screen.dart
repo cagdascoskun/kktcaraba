@@ -17,11 +17,15 @@ class CategoryShowcaseScreen extends StatefulWidget {
     required this.category,
     this.showPremium = true,
     this.vehicleSubcategory,
+    this.subcategoryLabel,
+    this.subcategoryDetailLabel,
   });
 
   final ListingCategory category;
   final bool showPremium;
   final VehicleSubcategory? vehicleSubcategory;
+  final String? subcategoryLabel;
+  final String? subcategoryDetailLabel;
 
   @override
   State<CategoryShowcaseScreen> createState() => _CategoryShowcaseScreenState();
@@ -35,6 +39,8 @@ class _CategoryShowcaseScreenState extends State<CategoryShowcaseScreen> {
   String? _selectedEngineType;
   String? _selectedCity;
   VehicleSubcategory? _selectedVehicleSubcategory;
+  String? _selectedSubcategoryLabel;
+  String? _selectedSubcategoryDetailLabel;
   double? _minPrice;
   double? _maxPrice;
   int? _minYear;
@@ -56,6 +62,8 @@ class _CategoryShowcaseScreenState extends State<CategoryShowcaseScreen> {
   void initState() {
     super.initState();
     _selectedVehicleSubcategory = widget.vehicleSubcategory;
+    _selectedSubcategoryLabel = widget.subcategoryLabel;
+    _selectedSubcategoryDetailLabel = widget.subcategoryDetailLabel;
   }
 
   bool get _hasActiveFilters => _buildActiveFilterChips().isNotEmpty;
@@ -125,6 +133,31 @@ class _CategoryShowcaseScreenState extends State<CategoryShowcaseScreen> {
                     _selectedModel = null;
                     _selectedEngineType = null;
                   }),
+        ),
+      );
+    }
+
+    if ((_selectedSubcategoryLabel ?? '').isNotEmpty) {
+      chips.add(
+        _CategoryFilterChipData(
+          label: _selectedSubcategoryLabel!,
+          onRemoved: widget.subcategoryLabel != null
+              ? null
+              : () => setState(() {
+                    _selectedSubcategoryLabel = null;
+                    _selectedSubcategoryDetailLabel = null;
+                  }),
+        ),
+      );
+    }
+
+    if ((_selectedSubcategoryDetailLabel ?? '').isNotEmpty) {
+      chips.add(
+        _CategoryFilterChipData(
+          label: _selectedSubcategoryDetailLabel!,
+          onRemoved: widget.subcategoryDetailLabel != null
+              ? null
+              : () => setState(() => _selectedSubcategoryDetailLabel = null),
         ),
       );
     }
@@ -311,6 +344,20 @@ class _CategoryShowcaseScreenState extends State<CategoryShowcaseScreen> {
     final results = _applySort(baseResults);
 
     final filteredResults = results.where((listing) {
+      if ((_selectedSubcategoryLabel ?? '').isNotEmpty) {
+        if ((listing.subcategory ?? '').toLowerCase() !=
+            _selectedSubcategoryLabel!.toLowerCase()) {
+          return false;
+        }
+      }
+
+      if ((_selectedSubcategoryDetailLabel ?? '').isNotEmpty) {
+        if ((listing.subcategoryDetail ?? '').toLowerCase() !=
+            _selectedSubcategoryDetailLabel!.toLowerCase()) {
+          return false;
+        }
+      }
+
       if (_selectedCity != null && _selectedCity!.isNotEmpty) {
         if (!listing.location
             .toLowerCase()
@@ -383,9 +430,13 @@ class _CategoryShowcaseScreenState extends State<CategoryShowcaseScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.vehicleSubcategory != null
-              ? vehicleSubcategoryLabel(widget.vehicleSubcategory!)
-              : categoryLabel(widget.category),
+          _selectedSubcategoryDetailLabel?.isNotEmpty ?? false
+              ? _selectedSubcategoryDetailLabel!
+              : (_selectedSubcategoryLabel?.isNotEmpty ?? false)
+                  ? _selectedSubcategoryLabel!
+                  : widget.vehicleSubcategory != null
+                      ? vehicleSubcategoryLabel(widget.vehicleSubcategory!)
+                      : categoryLabel(widget.category),
         ),
         actions: [
           IconButton(
