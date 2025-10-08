@@ -17,45 +17,54 @@ class ListingDetailScreen extends StatefulWidget {
 }
 
 class _ListingDetailScreenState extends State<ListingDetailScreen> {
-  late final Future<String?> _contactPhoneFuture;
+  late final Future<String> _dialPhoneFuture;
 
   @override
   void initState() {
     super.initState();
-    final raw = widget.listing.contactPhone.trim();
-    if (raw.isNotEmpty) {
-      _contactPhoneFuture = Future.value(raw);
-    } else {
-      final appState = Provider.of<AppState>(context, listen: false);
-      _contactPhoneFuture = appState.fetchUserPhone(widget.listing.publisherId);
+    _dialPhoneFuture = _getDialPhone();
+  }
+
+  Future<String> _getDialPhone() async {
+    final appState = Provider.of<AppState>(context, listen: false);
+    final listingPhone = widget.listing.contactPhone.trim();
+
+    String phone = normalizeTurkishPhone(listingPhone);
+
+    if (phone.isEmpty) {
+      final fetchedPhone = await appState.fetchUserPhone(
+        widget.listing.publisherId,
+      );
+      phone = normalizeTurkishPhone(fetchedPhone ?? '');
     }
+
+    if (phone.isEmpty &&
+        appState.currentUser?.id == widget.listing.publisherId) {
+      phone = normalizeTurkishPhone(appState.currentUser?.phone ?? '');
+    }
+
+    return phone;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return FutureBuilder<String?>(
-      future: _contactPhoneFuture,
+    return FutureBuilder<String>(
+      future: _dialPhoneFuture,
       builder: (context, snapshot) {
-        final fallbackRaw = widget.listing.contactPhone.trim();
-        final fetchedRaw = snapshot.data?.trim() ?? '';
-        String dialPhone = normalizeTurkishPhone(
-          fetchedRaw.isNotEmpty ? fetchedRaw : fallbackRaw,
-        );
-
-        final appState = Provider.of<AppState>(context, listen: false);
-        if (dialPhone.isEmpty &&
-            appState.currentUser?.id == widget.listing.publisherId) {
-          dialPhone = normalizeTurkishPhone(appState.currentUser?.phone ?? '');
-        }
+        // Future tamamlanana kadar butonları devre dışı bırakmak için
+        // bağlantı durumunu kontrol edebiliriz.
+        final dialPhone = snapshot.data ?? '';
 
         final hasPhone = dialPhone.isNotEmpty;
-        final displayPhone =
-            hasPhone ? formatTurkishPhone(dialPhone) : 'Telefon bilgisi belirtilmedi';
+        final displayPhone = hasPhone
+            ? formatTurkishPhone(dialPhone)
+            : 'Telefon bilgisi belirtilmedi';
 
         final agent = Agent(
           name: widget.listing.publisher,
+          // `displayPhone` zaten formatlanmış ve boşsa uygun mesajı içeriyor.
           phone: displayPhone,
           email: 'info@kktccaraba.com',
           company: widget.listing.publisher,
@@ -63,7 +72,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           isVerified: widget.listing.isPremium,
         );
 
-        final callUri = hasPhone ? Uri(scheme: 'tel', path: '+$dialPhone') : null;
+        // URI'yi doğrudan `dialPhone` ile oluşturabiliriz.
+        final callUri = hasPhone
+            ? Uri(scheme: 'tel', path: '+$dialPhone')
+            : null;
 
         return Scaffold(
           extendBodyBehindAppBar: true,
@@ -81,7 +93,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                 child: Container(
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(32),
+                    ),
                   ),
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 100),
                   child: Column(
@@ -91,20 +105,26 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                         children: [
                           Container(
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(alpha: .08),
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: .08,
+                              ),
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
                             child: Text(
                               widget.listing.type == ListingType.kiralik
                                   ? 'Kiralık'
                                   : widget.listing.type == ListingType.satilik
-                                      ? 'Satılık'
-                                      : widget.listing.type == ListingType.hizmet
-                                          ? 'Hizmet'
-                                          : 'İkinci El',
-                              style: theme.textTheme.labelLarge!
-                                  .copyWith(color: theme.colorScheme.primary),
+                                  ? 'Satılık'
+                                  : widget.listing.type == ListingType.hizmet
+                                  ? 'Hizmet'
+                                  : 'İkinci El',
+                              style: theme.textTheme.labelLarge!.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -114,13 +134,18 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                 color: const Color(0xFFFFF4E5),
                                 borderRadius: BorderRadius.circular(14),
                               ),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: const [
-                                  Icon(Icons.bolt_rounded,
-                                      color: Color(0xFFFF9800), size: 18),
+                                  Icon(
+                                    Icons.bolt_rounded,
+                                    color: Color(0xFFFF9800),
+                                    size: 18,
+                                  ),
                                   SizedBox(width: 6),
                                   Text('Öne Çıkan'),
                                 ],
@@ -129,30 +154,43 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      Text(widget.listing.title, style: theme.textTheme.headlineSmall),
+                      Text(
+                        widget.listing.title,
+                        style: theme.textTheme.headlineSmall,
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           Text(
-                            formatPrice(widget.listing.price, widget.listing.currency),
-                            style: theme.textTheme.headlineMedium!
-                                .copyWith(color: theme.colorScheme.primary),
+                            formatPrice(
+                              widget.listing.price,
+                              widget.listing.currency,
+                            ),
+                            style: theme.textTheme.headlineMedium!.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
                           const SizedBox(width: 12),
-                          Text('/ ${widget.listing.type == ListingType.kiralik ? 'aylık' : 'satış'}'),
+                          Text(
+                            '/ ${widget.listing.type == ListingType.kiralik ? 'aylık' : 'satış'}',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          const Icon(Icons.location_on_rounded, color: Colors.black54),
+                          const Icon(
+                            Icons.location_on_rounded,
+                            color: Colors.black54,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               widget.listing.location,
-                              style: theme.textTheme.bodyLarge!
-                                  .copyWith(color: Colors.black54),
+                              style: theme.textTheme.bodyLarge!.copyWith(
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ],
@@ -166,34 +204,47 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                             itemBuilder: (_, index) {
                               final tag = widget.listing.tags[index];
                               return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(alpha: .08),
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: .08,
+                                  ),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(tag.iconData,
-                                        size: 18,
-                                        color: theme.colorScheme.primary),
+                                    Icon(
+                                      tag.iconData,
+                                      size: 18,
+                                      color: theme.colorScheme.primary,
+                                    ),
                                     const SizedBox(width: 6),
                                     Text(
                                       tag.label,
                                       style: theme.textTheme.bodyMedium!
-                                          .copyWith(color: theme.colorScheme.primary),
+                                          .copyWith(
+                                            color: theme.colorScheme.primary,
+                                          ),
                                     ),
                                   ],
                                 ),
                               );
                             },
-                            separatorBuilder: (_, __) => const SizedBox(width: 12),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
                             itemCount: widget.listing.tags.length,
                           ),
                         ),
                       const SizedBox(height: 24),
                       Text('Açıklama', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 12),
-                      Text(widget.listing.description, style: theme.textTheme.bodyLarge),
+                      Text(
+                        widget.listing.description,
+                        style: theme.textTheme.bodyLarge,
+                      ),
                       const SizedBox(height: 24),
                       ListingFeatures(listing: widget.listing),
                       const SizedBox(height: 24),
@@ -208,8 +259,11 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                               Container(
                                 color: Colors.grey.shade200,
                                 child: const Center(
-                                  child: Icon(Icons.map_rounded,
-                                      size: 50, color: Colors.black45),
+                                  child: Icon(
+                                    Icons.map_rounded,
+                                    size: 50,
+                                    color: Colors.black45,
+                                  ),
                                 ),
                               ),
                               Positioned(
@@ -263,11 +317,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
+                    // Arama butonu
                     onPressed: hasPhone
-                        ? () => launchExternalUrl(
-                              context,
-                              callUri!,
-                            )
+                        ? () => launchExternalUrl(context, callUri!)
                         : null,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -280,12 +332,13 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
+                    // WhatsApp butonu
                     onPressed: hasPhone
                         ? () => openWhatsApp(
-                              context,
-                              dialPhone,
-                              'Merhaba ${agent.name}, "${widget.listing.title}" ilanı hakkında bilgi almak istiyorum.',
-                            )
+                            context,
+                            dialPhone,
+                            'Merhaba ${agent.name}, "${widget.listing.title}" ilanı hakkında bilgi almak istiyorum.',
+                          )
                         : null,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),

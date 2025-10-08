@@ -9,6 +9,7 @@ import '../create_listing_screen.dart';
 import '../listing_collection_screen.dart';
 import '../promote_listing_screen.dart';
 import '../settings_screen.dart';
+import '../analytics_dashboard_screen.dart';
 import '../support_center_screen.dart';
 import 'edit_profile_screen.dart';
 
@@ -65,7 +66,8 @@ class ProfileScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(28),
                               border: Border.all(color: Colors.white, width: 3),
                               color: Colors.white.withValues(alpha: .12),
-                              image: (!isGuest && user.avatarUrl.trim().isNotEmpty)
+                              image:
+                                  (!isGuest && user.avatarUrl.trim().isNotEmpty)
                                   ? DecorationImage(
                                       image: NetworkImage(user.avatarUrl),
                                       fit: BoxFit.cover,
@@ -103,8 +105,9 @@ class ProfileScreen extends StatelessWidget {
                                   padding: const EdgeInsets.only(top: 2),
                                   child: Text(
                                     formatTurkishPhone(user.phone),
-                                    style: theme.textTheme.bodyMedium!
-                                        .copyWith(color: Colors.white70),
+                                    style: theme.textTheme.bodyMedium!.copyWith(
+                                      color: Colors.white70,
+                                    ),
                                   ),
                                 ),
                               if (user.company.trim().isNotEmpty)
@@ -142,18 +145,6 @@ class ProfileScreen extends StatelessWidget {
                     height: 1.5,
                   ),
                 ),
-                if (!isGuest) ...[
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const EditProfileScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.edit_rounded),
-                    label: const Text('Profili Düzenle'),
-                  ),
-                ],
                 const SizedBox(height: 24),
                 Text('Hızlı İşlemler', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 16),
@@ -170,6 +161,16 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (!isGuest)
+                      QuickActionButton(
+                        icon: Icons.edit_rounded,
+                        label: 'Profili Düzenle',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const EditProfileScreen(),
+                          ),
+                        ),
+                      ),
                     QuickActionButton(
                       icon: Icons.support_agent_rounded,
                       label: 'Destek Talebi',
@@ -188,18 +189,29 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    QuickActionButton(
-                      icon: Icons.inventory_2_rounded,
-                      label: 'İlanlarım',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ListingCollectionScreen(
-                            title: 'İlanlarım',
-                            listings: appState.myListings(),
+                    if (!isGuest) ...[
+                      QuickActionButton(
+                        icon: Icons.inventory_2_rounded,
+                        label: 'İlanlarım',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ListingCollectionScreen(
+                              title: 'İlanlarım',
+                              listings: appState.myListings(),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                      QuickActionButton(
+                        icon: Icons.analytics_rounded,
+                        label: 'İstatistikler',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AnalyticsDashboardScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
                     QuickActionButton(
                       icon: Icons.settings_rounded,
                       label: 'Ayarlar',
@@ -212,35 +224,36 @@ class ProfileScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 32),
-                Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    leading: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.secondary.withValues(
-                          alpha: .12,
+                if (!isGuest)
+                  Card(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondary.withValues(
+                            alpha: .12,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        child: Icon(
+                          Icons.logout_rounded,
+                          color: theme.colorScheme.secondary,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.logout_rounded,
-                        color: theme.colorScheme.secondary,
+                      title: Text(
+                        'Çıkış Yap',
+                        style: theme.textTheme.titleMedium!.copyWith(
+                          color: theme.colorScheme.secondary,
+                        ),
                       ),
+                      subtitle: const Text('Güvenli çıkış yapmak için dokun.'),
+                      onTap: () => appState.signOut(),
                     ),
-                    title: Text(
-                      'Çıkış Yap',
-                      style: theme.textTheme.titleMedium!.copyWith(
-                        color: theme.colorScheme.secondary,
-                      ),
-                    ),
-                    subtitle: const Text('Güvenli çıkış yapmak için dokun.'),
-                    onTap: () => appState.signOut(),
                   ),
-                ),
                 const SizedBox(height: 80),
               ]),
             ),
