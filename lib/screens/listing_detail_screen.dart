@@ -23,6 +23,11 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   void initState() {
     super.initState();
     _dialPhoneFuture = _getDialPhone();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AppState>().recordListingView(widget.listing);
+    });
   }
 
   Future<String> _getDialPhone() async {
@@ -53,6 +58,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     return FutureBuilder<String>(
       future: _dialPhoneFuture,
       builder: (context, snapshot) {
+        final appState = Provider.of<AppState>(context, listen: false);
         // Future tamamlanana kadar butonları devre dışı bırakmak için
         // bağlantı durumunu kontrol edebiliriz.
         final dialPhone = snapshot.data ?? '';
@@ -319,7 +325,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                   child: ElevatedButton.icon(
                     // Arama butonu
                     onPressed: hasPhone
-                        ? () => launchExternalUrl(context, callUri!)
+                        ? () {
+                            appState.recordListingContact(widget.listing);
+                            launchExternalUrl(context, callUri!);
+                          }
                         : null,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -334,11 +343,14 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                   child: ElevatedButton.icon(
                     // WhatsApp butonu
                     onPressed: hasPhone
-                        ? () => openWhatsApp(
-                            context,
-                            dialPhone,
-                            'Merhaba ${agent.name}, "${widget.listing.title}" ilanı hakkında bilgi almak istiyorum.',
-                          )
+                        ? () {
+                            appState.recordListingContact(widget.listing);
+                            openWhatsApp(
+                              context,
+                              dialPhone,
+                              'Merhaba ${agent.name}, "${widget.listing.title}" ilanı hakkında bilgi almak istiyorum.',
+                            );
+                          }
                         : null,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),

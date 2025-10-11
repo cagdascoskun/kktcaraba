@@ -35,6 +35,7 @@ class ListingCollectionScreen extends StatelessWidget {
                   final listing = listings[index];
                   return ListingTile(
                     listing: listing,
+                    showStatusBadge: true,
                     onTap: (value) => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ListingDetailScreen(listing: value),

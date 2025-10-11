@@ -233,16 +233,87 @@ class ListingTile extends StatelessWidget {
     super.key,
     required this.listing,
     this.onTap,
+    this.showStatusBadge = false,
   });
 
   final Listing listing;
   final ListingTapCallback? onTap;
+  final bool showStatusBadge;
 
   @override
   Widget build(BuildContext context) {
-    return ListingCard(
+    final card = ListingCard(
       listing: listing,
       onTap: onTap,
+    );
+
+    if (!showStatusBadge) {
+      return card;
+    }
+
+    final status = listing.status;
+    if (status == ListingStatus.approved) {
+      return card;
+    }
+
+    final Color badgeColor;
+    final String label;
+
+    switch (status) {
+      case ListingStatus.pending:
+        badgeColor = Colors.orangeAccent;
+        label = 'Onay Bekliyor';
+        break;
+      case ListingStatus.rejected:
+        badgeColor = Colors.redAccent;
+        label = 'Reddedildi';
+        break;
+      case ListingStatus.approved:
+        badgeColor = Colors.green;
+        label = 'Yayında';
+        break;
+    }
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        card,
+        Positioned(
+          top: 18,
+          left: 18,
+          child: _StatusBadge(label: label, color: badgeColor),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .9),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: .35),
+            offset: const Offset(0, 2),
+            blurRadius: 6,
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(color: Colors.white),
+      ),
     );
   }
 }

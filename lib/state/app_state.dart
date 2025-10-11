@@ -13,6 +13,7 @@ import '../data/models.dart';
 import '../data/repositories.dart';
 import '../services/storage_service.dart';
 import '../utils/formatters.dart';
+import '../data/analytics_repository.dart';
 
 enum SortOption { newest, priceLowToHigh, priceHighToLow }
 
@@ -23,11 +24,13 @@ class AppState extends ChangeNotifier {
     FirebaseAuth? firebaseAuth,
     StorageService? storageService,
     FirebaseAnalytics? analytics,
+    AnalyticsRepository? analyticsRepository,
   })  : repository = listingRepository ?? ListingRepository(),
         _userRepository = userRepository ?? UserRepository(),
         _auth = firebaseAuth ?? FirebaseAuth.instance,
         _storageService = storageService ?? StorageService(),
-        _analytics = analytics ?? FirebaseAnalytics.instance {
+        _analytics = analytics ?? FirebaseAnalytics.instance,
+        _analyticsRepository = analyticsRepository ?? AnalyticsRepository() {
     repository.onChanged = _handleListingsChanged;
     repository.onError = (error, stack) {
       FirebaseCrashlytics.instance.recordError(error, stack,
@@ -49,6 +52,7 @@ class AppState extends ChangeNotifier {
   final FirebaseAuth _auth;
   final StorageService _storageService;
   final FirebaseAnalytics _analytics;
+  final AnalyticsRepository _analyticsRepository;
 
   AppUser? _currentUser;
   bool _isAuthenticated = false;
@@ -122,6 +126,8 @@ class AppState extends ChangeNotifier {
     }
     notifyListeners();
 
+    final listing = _findListing(listingId);
+
     if (_currentUser != null && !_isGuestSession) {
       try {
         await _userRepository.updateFavorites(
@@ -129,6 +135,13 @@ class AppState extends ChangeNotifier {
           listingId: listingId,
           add: willFavorite,
         );
+        if (listing != null) {
+          await _analyticsRepository.recordFavorite(
+            listingId,
+            listing.publisherId,
+            willFavorite,
+          );
+        }
       } catch (error, stack) {
         FirebaseCrashlytics.instance.recordError(
           error,
@@ -142,6 +155,15 @@ class AppState extends ChangeNotifier {
         }
         notifyListeners();
       }
+    }
+  }
+
+  Listing? _findListing(String listingId) {
+    try {
+      return repository.listings
+          .firstWhere((listing) => listing.id == listingId);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -272,6 +294,28 @@ class AppState extends ChangeNotifier {
     return user?.phone;
   }
 
+  Future<void> recordListingView(Listing listing) async {
+    if (listing.publisherId.isEmpty || listing.publisherId == _auth.currentUser?.uid) {
+      return;
+    }
+    try {
+      await _analyticsRepository.recordView(listing.id, listing.publisherId);
+    } catch (_) {
+      // analytics errors are non-critical
+    }
+  }
+
+  Future<void> recordListingContact(Listing listing) async {
+    if (listing.publisherId.isEmpty || listing.publisherId == _auth.currentUser?.uid) {
+      return;
+    }
+    try {
+      await _analyticsRepository.recordContact(listing.id, listing.publisherId);
+    } catch (_) {
+      // ignore
+    }
+  }
+
   Future<void> addListing(Listing listing) async {
     if (listing.category == ListingCategory.arac) {
       if ((listing.brand ?? '').isEmpty) {
@@ -354,12 +398,23 @@ class AppState extends ChangeNotifier {
     required String password,
   }) async {
     try {
+      final normalizedEmail = email.trim().toLowerCase();
       final sanitizedPhone = normalizeTurkishPhone(phone);
       if (sanitizedPhone.isEmpty) {
         throw AuthException('Telefon numarası geçerli değil.');
       }
+
+      final methods = await _auth.fetchSignInMethodsForEmail(normalizedEmail);
+      if (methods.isNotEmpty) {
+        throw AuthException('Bu e-posta ile kullanıcı zaten mevcut.');
+      }
+
+      if (_auth.currentUser != null) {
+        await _auth.signOut();
+      }
+
       final credential = await _auth.createUserWithEmailAndPassword(
-        email: email,
+        email: normalizedEmail,
         password: password,
       );
 
