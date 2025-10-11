@@ -25,16 +25,19 @@ class AppState extends ChangeNotifier {
     StorageService? storageService,
     FirebaseAnalytics? analytics,
     AnalyticsRepository? analyticsRepository,
-  })  : repository = listingRepository ?? ListingRepository(),
-        _userRepository = userRepository ?? UserRepository(),
-        _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _storageService = storageService ?? StorageService(),
-        _analytics = analytics ?? FirebaseAnalytics.instance,
-        _analyticsRepository = analyticsRepository ?? AnalyticsRepository() {
+  }) : repository = listingRepository ?? ListingRepository(),
+       _userRepository = userRepository ?? UserRepository(),
+       _auth = firebaseAuth ?? FirebaseAuth.instance,
+       _storageService = storageService ?? StorageService(),
+       _analytics = analytics ?? FirebaseAnalytics.instance,
+       _analyticsRepository = analyticsRepository ?? AnalyticsRepository() {
     repository.onChanged = _handleListingsChanged;
     repository.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack,
-          reason: 'Listing stream error');
+      FirebaseCrashlytics.instance.recordError(
+        error,
+        stack,
+        reason: 'Listing stream error',
+      );
     };
 
     final currentUser = _auth.currentUser;
@@ -77,29 +80,23 @@ class AppState extends ChangeNotifier {
       UnmodifiableSetView(_favoriteIds);
 
   List<Listing> get favoriteListings => List.unmodifiable(
-        repository.listings
-            .where((listing) => _favoriteIds.contains(listing.id))
-            .toList(),
-      );
+    repository.listings
+        .where((listing) => _favoriteIds.contains(listing.id))
+        .toList(),
+  );
 
   List<Listing> listingsByCategory(ListingCategory category) =>
       repository.listingsByCategory(category);
 
-  List<Listing> listingsByVehicleSubcategory(
-    VehicleSubcategory subcategory,
-  ) =>
+  List<Listing> listingsByVehicleSubcategory(VehicleSubcategory subcategory) =>
       repository.listingsByVehicleSubcategory(subcategory);
 
-  int vehicleSubcategoryCount(VehicleSubcategory subcategory) => repository
-      .listingsByVehicleSubcategory(subcategory)
-      .length;
+  int vehicleSubcategoryCount(VehicleSubcategory subcategory) =>
+      repository.listingsByVehicleSubcategory(subcategory).length;
 
   List<Listing> searchListings(String query) => repository.search(query);
 
-  List<Listing> searchInCategory(
-    ListingCategory category,
-    String query,
-  ) =>
+  List<Listing> searchInCategory(ListingCategory category, String query) =>
       repository.searchInCategory(category, query);
 
   List<Listing> premiumByCategory(ListingCategory category) =>
@@ -160,8 +157,9 @@ class AppState extends ChangeNotifier {
 
   Listing? _findListing(String listingId) {
     try {
-      return repository.listings
-          .firstWhere((listing) => listing.id == listingId);
+      return repository.listings.firstWhere(
+        (listing) => listing.id == listingId,
+      );
     } catch (_) {
       return null;
     }
@@ -234,13 +232,14 @@ class AppState extends ChangeNotifier {
     await _userRepository.updateProfile(firebaseUser.uid, data);
     await firebaseUser.updateDisplayName(name.trim());
 
-    final updatedUser = (_currentUser ?? _mapFirebaseUser(firebaseUser)).copyWith(
-      name: name.trim(),
-      phone: sanitizedPhone,
-      company: (company ?? '').trim(),
-      bio: (bio ?? '').trim(),
-      avatarUrl: avatarUrl,
-    );
+    final updatedUser = (_currentUser ?? _mapFirebaseUser(firebaseUser))
+        .copyWith(
+          name: name.trim(),
+          phone: sanitizedPhone,
+          company: (company ?? '').trim(),
+          bio: (bio ?? '').trim(),
+          avatarUrl: avatarUrl,
+        );
 
     _currentUser = updatedUser;
     notifyListeners();
@@ -266,7 +265,8 @@ class AppState extends ChangeNotifier {
     }
 
     final now = DateTime.now();
-    final baseDate = (listing.premiumExpiresAt != null &&
+    final baseDate =
+        (listing.premiumExpiresAt != null &&
             listing.premiumExpiresAt!.isAfter(now))
         ? listing.premiumExpiresAt!
         : now;
@@ -295,7 +295,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> recordListingView(Listing listing) async {
-    if (listing.publisherId.isEmpty || listing.publisherId == _auth.currentUser?.uid) {
+    if (listing.publisherId.isEmpty ||
+        listing.publisherId == _auth.currentUser?.uid) {
       return;
     }
     try {
@@ -306,7 +307,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> recordListingContact(Listing listing) async {
-    if (listing.publisherId.isEmpty || listing.publisherId == _auth.currentUser?.uid) {
+    if (listing.publisherId.isEmpty ||
+        listing.publisherId == _auth.currentUser?.uid) {
       return;
     }
     try {
@@ -349,8 +351,9 @@ class AppState extends ChangeNotifier {
         : (_auth.currentUser?.displayName ?? listing.publisher);
 
     final payload = listing.toMap()
-      ..['publisherId'] =
-          resolvedPublisherId.isNotEmpty ? resolvedPublisherId : 'guest'
+      ..['publisherId'] = resolvedPublisherId.isNotEmpty
+          ? resolvedPublisherId
+          : 'guest'
       ..['publisher'] = resolvedPublisherName.trim().isNotEmpty
           ? resolvedPublisherName.trim()
           : 'KKTC Caraba Kullanıcısı';
@@ -361,7 +364,9 @@ class AppState extends ChangeNotifier {
       normalizedContactPhone = normalizeTurkishPhone(_currentUser?.phone ?? '');
     }
     if (normalizedContactPhone.isEmpty) {
-      throw AuthException('Telefon numarası eksik. Lütfen profilinizi güncelleyin.');
+      throw AuthException(
+        'Telefon numarası eksik. Lütfen profilinizi güncelleyin.',
+      );
     }
     payload['contactPhone'] = normalizedContactPhone;
 
@@ -397,20 +402,15 @@ class AppState extends ChangeNotifier {
     required String phone,
     required String password,
   }) async {
+    User? createdUser;
+    var userDocumentCreated = false;
+
     try {
       final normalizedEmail = email.trim().toLowerCase();
       final sanitizedPhone = normalizeTurkishPhone(phone);
+
       if (sanitizedPhone.isEmpty) {
         throw AuthException('Telefon numarası geçerli değil.');
-      }
-
-      final methods = await _auth.fetchSignInMethodsForEmail(normalizedEmail);
-      if (methods.isNotEmpty) {
-        throw AuthException('Bu e-posta ile kullanıcı zaten mevcut.');
-      }
-
-      if (_auth.currentUser != null) {
-        await _auth.signOut();
       }
 
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -419,25 +419,54 @@ class AppState extends ChangeNotifier {
       );
 
       final user = credential.user;
-      if (user != null) {
-        await user.updateDisplayName(name);
-        await user.reload();
-        final mapped =
-            _mapFirebaseUser(user).copyWith(name: name, phone: sanitizedPhone);
-        await _userRepository.ensureUserDocument(mapped);
-        await _bootstrapAuthenticatedUser(user);
+      if (user == null) {
+        throw AuthException(
+          'Hesap oluşturulamadı. Lütfen tekrar deneyin.',
+        );
       }
+
+      createdUser = user;
+
+      await user.updateDisplayName(name);
+      final mapped =
+          _mapFirebaseUser(user).copyWith(name: name, phone: sanitizedPhone);
+
+      await _userRepository.ensureUserDocument(mapped);
+      userDocumentCreated = true;
+
+      await _bootstrapAuthenticatedUser(user);
 
       _isGuestSession = false;
       showOnboarding = true;
     } on FirebaseAuthException catch (error) {
       throw AuthException(_mapAuthError(error, forSignUp: true));
+    } on AuthException {
+      if (createdUser != null && !userDocumentCreated) {
+        await _cleanupFailedUserCreation(createdUser);
+      }
+      rethrow;
+    } catch (error, stackTrace) {
+      if (createdUser != null && !userDocumentCreated) {
+        await _cleanupFailedUserCreation(createdUser);
+      }
+      FirebaseCrashlytics.instance.recordError(
+        error,
+        stackTrace,
+        reason: 'Register failed',
+      );
+      throw AuthException(
+        'Kayıt sırasında beklenmedik bir hata oluştu. Lütfen tekrar deneyin.',
+      );
     }
   }
 
   Future<void> signIn({required String email, required String password}) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final normalizedEmail = email.trim().toLowerCase();
+      await _auth.signInWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password,
+      );
       _isGuestSession = false;
       showOnboarding = true;
     } on FirebaseAuthException catch (error) {
@@ -502,28 +531,42 @@ class AppState extends ChangeNotifier {
     await _userRepository.ensureUserDocument(mappedUser);
 
     _userSubscription?.cancel();
-    _userSubscription = _userRepository.watchUser(user.uid).listen(
-      (documentUser) {
-        if (documentUser != null) {
-          _currentUser = documentUser;
-          _favoriteIds
-            ..clear()
-            ..addAll(documentUser.favorites);
-        } else {
-          _favoriteIds.clear();
-        }
-        notifyListeners();
-      },
-      onError: (error, stackTrace) {
-        FirebaseCrashlytics.instance.recordError(
-          error,
-          stackTrace,
-          reason: 'User stream error',
+    _userSubscription = _userRepository
+        .watchUser(user.uid)
+        .listen(
+          (documentUser) {
+            if (documentUser != null) {
+              _currentUser = documentUser;
+              _favoriteIds
+                ..clear()
+                ..addAll(documentUser.favorites);
+            } else {
+              _favoriteIds.clear();
+            }
+            notifyListeners();
+          },
+          onError: (error, stackTrace) {
+            FirebaseCrashlytics.instance.recordError(
+              error,
+              stackTrace,
+              reason: 'User stream error',
+            );
+          },
         );
-      },
-    );
 
     notifyListeners();
+  }
+
+  Future<void> _cleanupFailedUserCreation(User user) async {
+    try {
+      await user.delete();
+    } catch (_) {
+      // ignore deletion errors so we can still sign out below
+    } finally {
+      if (_auth.currentUser?.uid == user.uid) {
+        await _auth.signOut();
+      }
+    }
   }
 
   AppUser _mapFirebaseUser(User user) {

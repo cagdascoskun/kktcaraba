@@ -165,7 +165,11 @@ class UserRepository {
       payload['phone'] = phoneToPersist;
     }
 
-    if (user.favorites.isNotEmpty) {
+    if (!snapshot.exists) {
+      payload['favorites'] = user.favorites.isNotEmpty
+          ? List<String>.from(user.favorites)
+          : <String>[];
+    } else if (user.favorites.isNotEmpty) {
       payload['favorites'] = FieldValue.arrayUnion(user.favorites);
     }
 

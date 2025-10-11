@@ -172,5 +172,17 @@ service cloud.firestore {
 
       allow delete: if isListingOwner(resource.data);
     }
+
+    match /analytics/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if request.resource.data.keys().hasOnly([
+            'viewsByListing',
+            'viewsOverTime',
+            'contactsByListing',
+            'favoritesByListing',
+            'lastUpdated',
+          ]);
+      allow delete: if isOwner(userId);
+    }
   }
 }
